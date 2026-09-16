@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SuperSort — automatic shelf labeling for Supermarket Simulator</title>
+<meta name="description" content="SuperSort is a BepInEx mod for Supermarket Simulator that automatically labels empty, compatible shelf slots for unassigned products. Assignment only — your restockers still do all the work." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath fill='%23E8A33D' stroke='%231C2321' stroke-width='10' stroke-linejoin='round' d='M34 58 H164 L224 128 L164 198 H34 Z'/%3E%3Ccircle fill='%231C2321' cx='66' cy='128' r='16'/%3E%3Cpath fill='none' stroke='%232F6F4E' stroke-width='22' stroke-linecap='round' stroke-linejoin='round' d='M96 130 L122 158 L182 96'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #1C2321;
+    --bg-elevated: #212925;
+    --bg-panel: #262F2A;
+    --amber: #E8A33D;
+    --amber-soft: #F2B85B;
+    --green: #2F6F4E;
+    --green-soft: #3E8A62;
+    --text: #F4F4F2;
+    --text-dim: #8A94A6;
+    --border: #3A4440;
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+    --max-w: 1100px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: inherit; }
+
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--amber-soft);
+    outline-offset: 3px;
+  }
+
+  .wrap {
+    max-width: var(--max-w);
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  /* ---------- Hero ---------- */
+
+  .hero {
+    padding: 120px 0 80px;
+    text-align: center;
+  }
+
+  .hero .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    margin-bottom: 32px;
+  }
+
+  .hero .badge .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+  }
+
+  .hero-logo {
+    width: 84px;
+    height: auto;
+    margin-bottom: 20px;
+  }
+
+  .hero h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(48px, 8vw, 84px);
+    letter-spacing: -0.02em;
+    margin: 0 0 16px;
+  }
+
+  .hero p.tagline {
+    font-size: clamp(18px, 2.4vw, 22px);
+    color: var(--text-dim);
+    max-width: 560px;
+    margin: 0 auto 40px;
+  }
+
+  .cta-row {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 88px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 26px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .btn:hover { transform: translateY(-1px); }
+
+  .btn-primary {
+    background: var(--green);
+    color: var(--text);
+  }
+  .btn-primary:hover { background: var(--green-soft); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--text-dim); }
+
+  /* ---------- Shelf demo ---------- */
+
+  .shelf-demo {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .slot {
+    width: 96px;
+    height: 140px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.5s ease;
+  }
+
+  .slot .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: opacity 0.3s ease;
+  }
+
+  .slot .tag-icon {
+    width: 48px;
+    height: auto;
+    opacity: 0;
+    transform: scale(0.6);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+  }
+
+  .slot.assigned {
+    border-color: var(--amber);
+  }
+  .slot.assigned .dot { opacity: 0; }
+  .slot.assigned .tag-icon {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slot, .slot .dot, .slot .tag-icon { transition: none; }
+  }
+
+  /* ---------- Section shared ---------- */
+
+  section { padding: 80px 0; }
+
+  .section-head {
+    max-width: 640px;
+    margin: 0 0 48px;
+  }
+
+  .section-head h2 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(30px, 4vw, 40px);
+    margin: 0 0 14px;
+  }
+
+  .section-head p {
+    color: var(--text-dim);
+    font-size: 17px;
+    margin: 0;
+  }
+
+  /* ---------- Why (two column) ---------- */
+
+  .why {
+    border-top: 1px solid var(--border);
+  }
+
+  .why-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 64px;
+    align-items: center;
+  }
+
+  .why-grid p {
+    font-size: 17px;
+    color: var(--text-dim);
+    margin: 0 0 18px;
+  }
+
+  .why-grid p strong { color: var(--text); font-weight: 600; }
+
+  .why-visual {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 36px;
+  }
+
+  .why-visual .row { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  .why-visual .row:last-child { margin-bottom: 0; }
+  .why-visual .check {
+    flex: none;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--green);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+  }
+  .why-visual .label { font-size: 15px; color: var(--text); }
+
+  @media (max-width: 760px) {
+    .why-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Features (tag-shaped cards) ---------- */
+
+  .features { border-top: 1px solid var(--border); }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 28px;
+  }
+
+  .feature-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    clip-path: polygon(0 0, 88% 0, 100% 50%, 88% 100%, 0 100%);
+    padding: 28px 56px 28px 28px;
+  }
+
+  .feature-card h3 {
+    font-size: 17px;
+    margin: 0 0 8px;
+    font-weight: 600;
+  }
+
+  .feature-card p {
+    font-size: 14.5px;
+    color: var(--text-dim);
+    margin: 0;
+  }
+
+  /* ---------- Install ---------- */
+
+  .install { border-top: 1px solid var(--border); }
+
+  .steps {
+    counter-reset: step;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 20px;
+  }
+
+  .step .num {
+    counter-increment: step;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 600;
+    color: var(--amber);
+  }
+  .step .num::before { content: counter(step); }
+
+  .step .body h4 { margin: 6px 0 8px; font-size: 16px; }
+  .step .body p { margin: 0; color: var(--text-dim); font-size: 15px; }
+
+  code, .code-block {
+    font-family: 'SFMono-Regular', Consolas, monospace;
+    font-size: 14px;
+  }
+
+  .code-block {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-top: 10px;
+    color: var(--amber-soft);
+    overflow-x: auto;
+  }
+
+  /* ---------- Beta warning ---------- */
+
+  .beta {
+    border: 1px solid var(--amber);
+    background: rgba(232, 163, 61, 0.08);
+    border-radius: 12px;
+    padding: 28px 32px;
+  }
+
+  .beta h3 {
+    margin: 0 0 10px;
+    color: var(--amber-soft);
+    font-size: 17px;
+  }
+
+  .beta p {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 15px;
+  }
+
+  /* ---------- Footer ---------- */
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 0;
+  }
+
+  .footer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .footer-row .links {
+    display: flex;
+    gap: 24px;
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+
+  .footer-row .links a:hover { color: var(--text); }
+
+  .footer-row .credit {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+
+  <header class="hero">
+    <div class="wrap">
+      <div class="badge"><span class="dot"></span> BETA — back up your save before use</div>
+
+      <svg class="hero-logo" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path fill="#E8A33D" stroke="#1C2321" stroke-width="6" stroke-linejoin="round" d="M34 58 H164 L224 128 L164 198 H34 Z" />
+        <path fill="#F2B85B" opacity="0.35" d="M34 58 H164 L184 82 H50 Z" />
+        <circle fill="#1C2321" cx="66" cy="128" r="15" />
+        <circle fill="none" stroke="#1C2321" stroke-width="4" opacity="0.7" cx="66" cy="128" r="19" />
+        <path fill="none" stroke="#2F6F4E" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M96 130 L122 158 L182 96" />
+      </svg>
+
+      <h1>SuperSort</h1>
+      <p class="tagline">Automatically labels empty, compatible shelf slots for unassigned products. Your restockers still do all the actual work.</p>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/RadtALIVE/SuperSort/releases/latest">Download latest release</a>
+        <a class="btn btn-secondary" href="https://github.com/RadtALIVE/SuperSort">View on GitHub</a>
+      </div>
+
+      <div class="shelf-demo" id="shelfDemo">
+        <div class="slot"><span class="dot"></span><svg class="tag-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="#E8A33D" stroke="#1C2321" stroke-width="8" stroke-linejoin="round" d="M34 58 H164 L224 128 L164 198 H34 Z"/><circle fill="#1C2321" cx="66" cy="128" r="15"/><path fill="none" stroke="#2F6F4E" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M96 130 L122 158 L182 96"/></svg></div>
+        <div class="slot"><span class="dot"></span><svg class="tag-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="#E8A33D" stroke="#1C2321" stroke-width="8" stroke-linejoin="round" d="M34 58 H164 L224 128 L164 198 H34 Z"/><circle fill="#1C2321" cx="66" cy="128" r="15"/><path fill="none" stroke="#2F6F4E" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M96 130 L122 158 L182 96"/></svg></div>
+        <div class="slot"><span class="dot"></span><svg class="tag-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="#E8A33D" stroke="#1C2321" stroke-width="8" stroke-linejoin="round" d="M34 58 H164 L224 128 L164 198 H34 Z"/><circle fill="#1C2321" cx="66" cy="128" r="15"/><path fill="none" stroke="#2F6F4E" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M96 130 L122 158 L182 96"/></svg></div>
+        <div class="slot"><span class="dot"></span><svg class="tag-icon" viewBox="0 0 256 256" aria-hidden="true"><path fill="#E8A33D" stroke="#1C2321" stroke-width="8" stroke-linejoin="round" d="M34 58 H164 L224 128 L164 198 H34 Z"/><circle fill="#1C2321" cx="66" cy="128" r="15"/><path fill="none" stroke="#2F6F4E" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" d="M96 130 L122 158 L182 96"/></svg></div>
+      </div>
+    </div>
+  </header>
+
+  <section class="why">
+    <div class="wrap why-grid">
+      <div>
+        <div class="section-head">
+          <h2>The restocking isn't the tedious part.</h2>
+        </div>
+        <p>Supermarket Simulator's restockers are good at their job — once a shelf slot is labeled for a product, they'll find it in storage or off the delivery truck and carry it over themselves. <strong>No help needed.</strong></p>
+        <p>The tedious part is clicking through every empty slot yourself, one at a time, before any of that can even start.</p>
+        <p>SuperSort skips that one click. <strong>Everything downstream stays exactly as it was.</strong></p>
+      </div>
+      <div class="why-visual">
+        <div class="row"><span class="check">✓</span><span class="label">Sourcing stock — unchanged</span></div>
+        <div class="row"><span class="check">✓</span><span class="label">Storage vs. delivery priority — unchanged</span></div>
+        <div class="row"><span class="check">✓</span><span class="label">Carrying the box — unchanged</span></div>
+        <div class="row"><span class="check">✓</span><span class="label">Stocking the shelf — unchanged</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>What it does</h2>
+        <p>Five things, nothing more.</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h3>Automatic labeling</h3>
+          <p>Scans for unassigned products and labels a compatible empty slot on a configurable interval.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Real compatibility checks</h3>
+          <p>Reuses the game's own slot-compatibility logic instead of guessing which products belong where.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Duplicate-safe</h3>
+          <p>Never assigns a product that already has a pending or active slot, never overwrites an existing label.</p>
+        </div>
+        <div class="feature-card">
+          <h3>Assignment only</h3>
+          <p>Doesn't spawn, move, or place a single product. That stays entirely up to the game's restocker AI.</p>
+        </div>
+        <div class="feature-card">
+          <h3>F6 toggle</h3>
+          <p>Off by default. Press F6 to enable or pause anytime — existing labels are never undone.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="install">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Installation</h2>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="num"></div>
+          <div class="body">
+            <h4>Install BepInEx</h4>
+            <p>Get the IL2CPP build of <a href="https://github.com/BepInEx/BepInEx">BepInEx</a> for Supermarket Simulator, if you haven't already.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num"></div>
+          <div class="body">
+            <h4>Download SuperSort.dll</h4>
+            <p>Grab it from the <a href="https://github.com/RadtALIVE/SuperSort/releases/latest">latest release</a>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num"></div>
+          <div class="body">
+            <h4>Copy it into your plugins folder</h4>
+            <div class="code-block">Supermarket Simulator\BepInEx\plugins\SuperSort\SuperSort.dll</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num"></div>
+          <div class="body">
+            <h4>Launch and press F6</h4>
+            <p>Load a save, press F6 in-game to enable SuperSort. Press it again anytime to pause.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="beta-section">
+    <div class="wrap">
+      <div class="beta">
+        <h3>⚠ Please back up your save</h3>
+        <p>SuperSort is currently in BETA. It writes label/assignment state to display slots at runtime, and while it's designed to avoid touching anything else, it hasn't been tested across the full range of saves, shelf types, and game versions yet. A save backup means you can always roll back if something looks off, with zero risk to your progress.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap footer-row">
+      <div class="links">
+        <a href="https://github.com/RadtALIVE/SuperSort">GitHub</a>
+        <a href="https://github.com/RadtALIVE/SuperSort/releases/latest">Releases</a>
+        <a href="https://github.com/RadtALIVE/SuperSort/blob/main/LICENSE">MIT License</a>
+      </div>
+      <div class="credit">SuperSort is a fan mod, not affiliated with the developers of Supermarket Simulator.</div>
+    </div>
+  </footer>
+
+  <script>
+    // Ambient demo: cycles which shelf slot shows as "labeled", one at a time.
+    (function () {
+      var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var slots = document.querySelectorAll('#shelfDemo .slot');
+      if (!slots.length) return;
+
+      if (reduceMotion) {
+        slots[2].classList.add('assigned');
+        return;
+      }
+
+      var current = 0;
+      slots[current].classList.add('assigned');
+
+      setInterval(function () {
+        slots[current].classList.remove('assigned');
+        current = (current + 1) % slots.length;
+        slots[current].classList.add('assigned');
+      }, 1800);
+    })();
+  </script>
+
+</body>
+</html>
